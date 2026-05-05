@@ -12,9 +12,7 @@ import AddWorkerForm from '../components/AddWorkerForm';
 export default function HomePage() {
   const headerRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
-  const animatedRef = useRef(false);
-
-  const [workers, setWorkers] = useState<Worker[]>([]);
+const [workers, setWorkers] = useState<Worker[]>([]);
   const [selected, setSelected] = useState<Worker | null>(null);
   const [showAddWorker, setShowAddWorker] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -45,13 +43,11 @@ export default function HomePage() {
     }
   }, [workers]);
 
+  // Animate immediately on mount — don't wait for Firestore
   useEffect(() => {
-    if (!loading && !animatedRef.current) {
-      animatedRef.current = true;
-      gsap.fromTo(headerRef.current, { opacity: 0, y: -30 }, { opacity: 1, y: 0, duration: 0.8, ease: 'power2.out' });
-      gsap.fromTo(gridRef.current, { opacity: 0 }, { opacity: 1, duration: 0.6, delay: 0.4 });
-    }
-  }, [loading]);
+    gsap.fromTo(headerRef.current, { opacity: 0, y: -30 }, { opacity: 1, y: 0, duration: 0.8, ease: 'power2.out' });
+    gsap.fromTo(gridRef.current, { opacity: 0 }, { opacity: 1, duration: 0.6, delay: 0.3 });
+  }, []);
 
   const handleAddWorker = async (name: string, role: string, photo?: string) => {
     const w = await workerService.create(name, role, photo);
