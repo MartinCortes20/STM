@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../../infrastructure/firebaseClient';
 import { Worker, Task } from '../../domain/types';
 import { workerService } from '../../use-cases/workerService';
 import ParticleBackground from '../components/ParticleBackground';
@@ -10,6 +12,7 @@ import AddWorkerForm from '../components/AddWorkerForm';
 export default function HomePage() {
   const headerRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+  const animatedRef = useRef(false);
 
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [selected, setSelected] = useState<Worker | null>(null);
@@ -17,22 +20,38 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Real-time subscription — fires from local cache instantly on repeat visits
   useEffect(() => {
-    workerService.getAll()
-      .then(setWorkers)
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false));
+    const unsub = onSnapshot(
+      collection(db, 'workers'),
+      snap => {
+        const data = snap.docs.map(d => ({ ...(d.data() as Omit<Worker, 'id'>), id: d.id }));
+        setWorkers(data);
+        setLoading(false);
+      },
+      err => {
+        setError(err.message);
+        setLoading(false);
+      }
+    );
+    return unsub;
   }, []);
 
+  // Keep selected worker in sync when workers update
   useEffect(() => {
-    if (!loading) {
+    if (selected) {
+      const updated = workers.find(w => w.id === selected.id);
+      if (updated) setSelected(updated);
+    }
+  }, [workers]);
+
+  useEffect(() => {
+    if (!loading && !animatedRef.current) {
+      animatedRef.current = true;
       gsap.fromTo(headerRef.current, { opacity: 0, y: -30 }, { opacity: 1, y: 0, duration: 0.8, ease: 'power2.out' });
       gsap.fromTo(gridRef.current, { opacity: 0 }, { opacity: 1, duration: 0.6, delay: 0.4 });
     }
   }, [loading]);
-
-  const refresh = () =>
-    workerService.getAll().then(setWorkers).catch(e => setError(e.message));
 
   const handleAddWorker = async (name: string, role: string, photo?: string) => {
     const w = await workerService.create(name, role, photo);
@@ -49,25 +68,17 @@ export default function HomePage() {
   const handleAddTask = async (task: Omit<Task, 'id' | 'updates' | 'createdAt' | 'status'>) => {
     if (!selected) return;
     await workerService.addTask(selected.id, task);
-    await refresh();
-    const updated = (await workerService.getAll()).find(w => w.id === selected.id);
-    if (updated) setSelected(updated);
+    // onSnapshot updates workers automatically
   };
 
   const handleUpdateTask = async (taskId: string, status: Task['status'], comment: string) => {
     if (!selected) return;
     await workerService.updateTask(selected.id, taskId, { status, comment: comment || undefined });
-    await refresh();
-    const updated = (await workerService.getAll()).find(w => w.id === selected.id);
-    if (updated) setSelected(updated);
   };
 
   const handleDeleteTask = async (taskId: string) => {
     if (!selected) return;
     await workerService.deleteTask(selected.id, taskId);
-    await refresh();
-    const updated = (await workerService.getAll()).find(w => w.id === selected.id);
-    if (updated) setSelected(updated);
   };
 
   return (
